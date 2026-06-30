@@ -7,6 +7,6 @@ Claude导出对话记录的阅读工具
 
 关于记录如何导出：
 
-点击左下角账号信息-setting-privacy-your data-export data。点击之后过一会儿会在你的邮箱里收到个下链接。
+点击左下角账号信息-setting-privacy-your data-export data。点击之后过一会儿会在你的邮箱里收到个下载链接。
 
 大家要尽快下载，不要犯懒。
