@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude 对话浏览器</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg-2: #f7f7f5;
+    --bg-3: #f0efe9;
+    --text: #1a1a18;
+    --text-2: #6b6b65;
+    --text-3: #9e9e97;
+    --border: rgba(0,0,0,0.1);
+    --border-2: rgba(0,0,0,0.18);
+    --accent: #2563eb;
+    --accent-bg: #eff6ff;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 8px rgba(0,0,0,0.04);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg-2: #252523;
+      --bg-3: #2e2e2b;
+      --text: #e8e8e2;
+      --text-2: #9a9a92;
+      --text-3: #666660;
+      --border: rgba(255,255,255,0.1);
+      --border-2: rgba(255,255,255,0.18);
+      --accent: #60a5fa;
+      --accent-bg: rgba(96,165,250,0.12);
+      --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+  }
+
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg-3);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    height: 48px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+    z-index: 10;
+  }
+  .logo { font-weight: 600; font-size: 15px; letter-spacing: -0.3px; }
+  .logo span { color: var(--accent); }
+  header .sep { flex: 1; }
+  #file-btn {
+    padding: 6px 14px;
+    font-size: 13px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  #file-btn:hover { opacity: 0.85; }
+  #global-stats { font-size: 12px; color: var(--text-3); }
+
+  /* ── Main layout ── */
+  #layout {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── Upload screen ── */
+  #upload-screen {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #drop-zone {
+    width: 420px;
+    padding: 48px 32px;
+    background: var(--bg);
+    border: 1.5px dashed var(--border-2);
+    border-radius: calc(var(--radius) * 1.5);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #drop-zone:hover, #drop-zone.drag {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .drop-icon {
+    width: 52px; height: 52px;
+    margin: 0 auto 16px;
+    background: var(--accent-bg);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .drop-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .drop-sub { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+  .drop-hint { margin-top: 12px; font-size: 12px; color: var(--text-3); }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 300px;
+    min-width: 220px;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    display: none;
+    flex-direction: column;
+  }
+  #sidebar.visible { display: flex; }
+
+  #search-wrap {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  #search-input {
+    width: 100%;
+    padding: 7px 12px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #search-input:focus { border-color: var(--accent); background: var(--bg); }
+  #search-stats { font-size: 11px; color: var(--text-3); margin-top: 6px; padding: 0 2px; }
+
+  #conv-list { flex: 1; overflow-y: auto; }
+  #conv-list::-webkit-scrollbar { width: 4px; }
+  #conv-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+
+  .conv-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  .conv-item:hover { background: var(--bg-2); }
+  .conv-item.active { background: var(--accent-bg); border-left: 3px solid var(--accent); }
+  .conv-item.active .conv-title { color: var(--accent); }
+  .conv-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 3px; }
+  .conv-meta { font-size: 11px; color: var(--text-3); }
+  .conv-matches { font-size: 11px; color: var(--accent); margin-top: 2px; }
+  mark { background: #fef3c7; color: inherit; border-radius: 2px; padding: 0 1px; }
+  @media (prefers-color-scheme: dark) { mark { background: #78350f; } }
+
+  /* ── Main panel ── */
+  #main {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #main.visible { display: flex; }
+
+  #conv-header {
+    padding: 10px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #conv-title { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #conv-info { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+  .action-btn {
+    padding: 5px 11px;
+    font-size: 12px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.1s;
+  }
+  .action-btn:hover { background: var(--bg-2); }
+
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+
+  .msg { max-width: 85%; display: flex; flex-direction: column; gap: 3px; }
+  .msg.human { align-self: flex-end; align-items: flex-end; }
+  .msg.assistant { align-self: flex-start; align-items: flex-start; max-width: 92%; }
+
+  .msg-bubble {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    position: relative;
+  }
+  .msg.human .msg-bubble {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 3px;
+  }
+  .msg.assistant .msg-bubble {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 3px;
+  }
+  .msg-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  .copy-msg-btn {
+    font-size: 11px;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.1s, background 0.1s;
+  }
+  .copy-msg-btn:hover { color: var(--text); background: var(--bg-2); }
+
+  /* ── Empty panel ── */
+  #empty-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    font-size: 13px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #empty-panel .icon { font-size: 32px; opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Claude <span>对话浏览器</span></div>
+  <div class="sep"></div>
+  <span id="global-stats"></span>
+  <button id="file-btn" onclick="document.getElementById('file-input').click()">加载文件</button>
+  <input type="file" id="file-input" accept=".json" style="display:none" onchange="loadFile(this.files[0])">
+</header>
+
+<div id="layout">
+  <!-- Upload screen -->
+  <div id="upload-screen">
+    <div id="drop-zone"
+      onclick="document.getElementById('file-input').click()"
+      ondragover="event.preventDefault(); this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event)">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">加载 Claude 对话记录</div>
+      <div class="drop-sub">点击选择文件，或将 JSON 文件拖拽到此处</div>
+      <div class="drop-hint">文件在本地处理，不会上传到任何服务器</div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="search-wrap">
+      <input type="text" id="search-input" placeholder="搜索对话标题或内容..." oninput="doSearch()">
+      <div id="search-stats"></div>
+    </div>
+    <div id="conv-list"></div>
+  </div>
+
+  <!-- Main panel -->
+  <div id="main">
+    <div id="empty-panel">
+      <div class="icon">💬</div>
+      <span>从左侧选择一个对话</span>
+    </div>
+    <div id="conv-header" style="display:none">
+      <span id="conv-title"></span>
+      <span id="conv-info"></span>
+      <button class="action-btn" onclick="copyAllText()">复制全部</button>
+      <button class="action-btn" onclick="exportTxt()">导出 .txt</button>
+    </div>
+    <div id="messages" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+let allConvs = [];
+let filtered = [];
+let currentIdx = null;
+let query = '';
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      parseData(JSON.parse(e.target.result));
+    } catch {
+      alert('JSON 解析失败，请确认文件格式正确。');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function extractText(m) {
+  if (typeof m.text === 'string') return m.text;
+  if (typeof m.content === 'string') return m.content;
+  if (Array.isArray(m.content)) return m.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+  return '';
+}
+
+function parseData(data) {
+  const raw = Array.isArray(data) ? data : (data.conversations || []);
+  if (!raw.length) { alert('未找到对话数据，请确认是 Claude.ai 导出文件。'); return; }
+
+  allConvs = raw.map((c, i) => {
+    const msgs = (c.chat_messages || c.messages || []).map(m => ({
+      role: m.sender || m.role || 'unknown',
+      text: extractText(m),
+      time: m.created_at || m.timestamp || ''
+    })).filter(m => m.text);
+    return {
+      idx: i,
+      name: c.name || c.title || '未命名对话',
+      created: c.created_at || c.created || '',
+      updated: c.updated_at || c.updated || '',
+      msgs
+    };
+  }).sort((a, b) => (b.updated || b.created || '').localeCompare(a.updated || a.created || ''));
+
+  document.getElementById('upload-screen').style.display = 'none';
+  document.getElementById('sidebar').classList.add('visible');
+  document.getElementById('main').classList.add('visible');
+  document.getElementById('global-stats').textContent = `${allConvs.length} 个对话`;
+
+  doSearch();
+}
+
+function doSearch() {
+  query = (document.getElementById('search-input').value || '').trim().toLowerCase();
+  if (!query) {
+    filtered = allConvs.map(c => ({ ...c, msgMatches: 0 }));
+  } else {
+    filtered = allConvs.map(c => {
+      const titleHit = c.name.toLowerCase().includes(query) ? 1 : 0;
+      const msgMatches = c.msgs.filter(m => m.text.toLowerCase().includes(query)).length;
+      return { ...c, msgMatches, totalMatches: titleHit + msgMatches };
+    }).filter(c => c.totalMatches > 0).sort((a, b) => b.totalMatches - a.totalMatches);
+  }
+  renderList();
+  const el = document.getElementById('search-stats');
+  el.textContent = query ? `${filtered.length} / ${allConvs.length} 个对话匹配` : `共 ${allConvs.length} 个对话`;
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function hl(s, q) {
+  return esc(s).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m => `<mark>${m}</mark>`);
+}
+
+function renderList() {
+  const list = document.getElementById('conv-list');
+  list.innerHTML = '';
+  filtered.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'conv-item' + (currentIdx === c.idx ? ' active' : '');
+
+    const d = c.updated || c.created;
+    const dateStr = d ? new Date(d).toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }) : '';
+
+    div.innerHTML = `
+      <div class="conv-title">${query ? hl(c.name, query) : esc(c.name)}</div>
+      <div class="conv-meta">${dateStr}${dateStr ? ' · ' : ''}${c.msgs.length} 条消息</div>
+      ${query && c.msgMatches > 0 ? `<div class="conv-matches">内容命中 ${c.msgMatches} 处</div>` : ''}
+    `;
+    div.onclick = () => selectConv(c.idx);
+    list.appendChild(div);
+  });
+}
+
+function selectConv(idx) {
+  currentIdx = idx;
+  const conv = allConvs.find(c => c.idx === idx);
+  if (!conv) return;
+
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  const fi = filtered.findIndex(c => c.idx === idx);
+  if (fi >= 0) document.querySelectorAll('.conv-item')[fi].classList.add('active');
+
+  document.getElementById('empty-panel').style.display = 'none';
+  document.getElementById('conv-header').style.display = 'flex';
+  document.getElementById('messages').style.display = 'flex';
+  document.getElementById('conv-title').textContent = conv.name;
+
+  const d = conv.updated || conv.created;
+  document.getElementById('conv-info').textContent = d ? new Date(d).toLocaleDateString('zh-CN') : '';
+
+  const container = document.getElementById('messages');
+  container.innerHTML = '';
+
+  conv.msgs.forEach(m => {
+    const role = m.role === 'human' ? 'human' : 'assistant';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'msg ' + role;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    if (query && m.text.toLowerCase().includes(query)) {
+      bubble.innerHTML = hl(m.text, query);
+    } else {
+      bubble.textContent = m.text;
+    }
+
+    const footer = document.createElement('div');
+    footer.className = 'msg-footer';
+
+    const time = m.time ? new Date(m.time).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+    if (time) footer.innerHTML = `<span>${time}</span>`;
+
+    const btn = document.createElement('button');
+    btn.className = 'copy-msg-btn';
+    btn.textContent = '复制';
+    btn.onclick = () => {
+      navigator.clipboard.writeText(m.text);
+      btn.textContent = '✓ 已复制';
+      setTimeout(() => btn.textContent = '复制', 1500);
+    };
+    footer.appendChild(btn);
+
+    wrapper.appendChild(bubble);
+    wrapper.appendChild(footer);
+    container.appendChild(wrapper);
+  });
+
+  container.scrollTop = 0;
+}
+
+function convToText(conv) {
+  return `${conv.name}\n${'='.repeat(50)}\n\n` +
+    conv.msgs.map(m => `【${m.role === 'human' ? '你' : 'Claude'}】\n${m.text}`).join('\n\n' + '-'.repeat(30) + '\n\n');
+}
+
+function copyAllText() {
+  const conv = allConvs.find(c => c.idx === currentIdx);
+  if (!conv) return;
+  navigator.clipboard.writeText(convToText(conv));
+  const btn = event.target;
+  btn.textContent = '✓ 已复制';
+  setTimeout(() => btn.textContent = '复制全部', 1500);
+}
+
+function exportTxt() {
+  const conv = allConvs.find(c => c.idx === currentIdx);
+  if (!conv) return;
+  const blob = new Blob([convToText(conv)], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = conv.name.replace(/[/\\?%*:|"<>]/g, '_').slice(0, 60) + '.txt';
+  a.click();
+}
+</script>
+</body>
+</html>
