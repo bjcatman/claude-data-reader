@@ -1,4 +1,4 @@
-# claudedatareader
+# claude-data-reader
 Claude导出对话记录的阅读工具
 
 应该有不少兄弟的Claude被A社给封了吧，这个页面是用来阅读下载的对话记录的，虽然我们分手了，但是好歹有那么一段时间的陪伴在。
